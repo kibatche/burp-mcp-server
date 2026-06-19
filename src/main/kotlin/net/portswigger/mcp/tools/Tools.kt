@@ -9,6 +9,8 @@ import burp.api.montoya.http.HttpMode
 import burp.api.montoya.http.HttpService
 import burp.api.montoya.http.message.HttpHeader
 import burp.api.montoya.http.message.requests.HttpRequest
+import burp.api.montoya.http.message.HttpRequestResponse
+import burp.api.montoya.core.Annotations
 import io.modelcontextprotocol.kotlin.sdk.server.Server
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.Serializable
@@ -19,9 +21,21 @@ import net.portswigger.mcp.security.DataAccessSecurity
 import net.portswigger.mcp.security.DataAccessType
 import net.portswigger.mcp.security.HttpRequestSecurity
 import net.portswigger.mcp.security.filterConfigCredentials
+import net.portswigger.mcp.tools.jTabbedPaneInfos
+import net.portswigger.mcp.tools.getNumberOfTabInGroup
+import net.portswigger.mcp.tools.CONTENT_OPTIONS
 import java.awt.KeyboardFocusManager
+import java.awt.Container
+import java.awt.Component
+import java.awt.Frame
 import java.util.regex.Pattern
 import javax.swing.JTextArea
+import javax.swing.JComponent
+import javax.swing.JTabbedPane
+import javax.swing.JLabel
+import javax.swing.text.JTextComponent
+import javax.swing.SwingUtilities
+import kotlin.text.toCharArray
 
 private suspend fun checkDataAccessOrDeny(
     accessType: DataAccessType, config: McpConfig, api: MontoyaApi, logMessage: String
@@ -35,9 +49,12 @@ private suspend fun checkDataAccessOrDeny(
     return true
 }
 
+/**
+ * Change: 50000 instead of 5000 : maybe it's too much, but I don't know for now.
+ *  */ 
 private fun truncateIfNeeded(serialized: String): String {
-    return if (serialized.length > 5000) {
-        serialized.substring(0, 5000) + "... (truncated)"
+    return if (serialized.length > 50000) {
+        serialized.substring(0, 50000) + "... (truncated)"
     } else {
         serialized
     }
@@ -185,6 +202,29 @@ fun Server.registerTools(api: MontoyaApi, config: McpConfig) {
         val fixedContent = normalizeHttpContent(content)
         val request = HttpRequest.httpRequest(toMontoyaService(), fixedContent)
         api.intruder().sendToIntruder(request, tabName)
+    }
+
+    //PAI
+    /**
+     * @brief Stores a raw HTTP/1.1 request in Burp's Organizer via the Montoya API.
+     *        Why API and not UI: api.organizer() exposes both read (items()) and write
+     *        (sendToOrganizer), so unlike the Repeater there is no need to scrape Swing.
+     * @return A confirmation string once the request has been sent to the Organizer.
+     */
+    mcpTool<SendToOrganizer>("Stores an HTTP request in Burp's Organizer (a holding area for requests of interest). Provide the raw HTTP/1.1 request plus the target host and port, and optionally a note to attach to the item. Make sure to use carriage returns appropriately. Read stored items back with get_organizer_items.") {
+        val fixedContent = normalizeHttpContent(content)
+        val request = HttpRequest.httpRequest(toMontoyaService(), fixedContent)
+        if (note.isNullOrBlank()) {
+            api.organizer().sendToOrganizer(request)
+            "Request sent to the Organizer."
+        } else {
+            // No response yet (the request hasn't been sent): build a request/response pair with a
+            // null response so the note can ride along via annotations. The Organizer accepts
+            // no-response items (sendToOrganizer(HttpRequest) already produces "<no response>").
+            val withNote = HttpRequestResponse.httpRequestResponse(request, null, Annotations.annotations(note))
+            api.organizer().sendToOrganizer(withNote)
+            "Request sent to the Organizer (note: $note)."
+        }
     }
 
     mcpTool<UrlEncode>("URL encodes the input string") {
@@ -399,7 +439,6 @@ fun Server.registerTools(api: MontoyaApi, config: McpConfig) {
 
     mcpTool<SetActiveEditorContents>("Sets the content of the user's active message editor") {
         val editor = getActiveEditor(api) ?: return@mcpTool "<No active editor>"
-
         if (!editor.isEditable) {
             return@mcpTool "<Current editor is not editable>"
         }
@@ -408,7 +447,246 @@ fun Server.registerTools(api: MontoyaApi, config: McpConfig) {
 
         "Editor text has been set"
     }
+
+    mcpTool("get_all_repeater_tabs_name", "List the names of all Repeater tabs in display order. Group headers are prefixed with [GROUP] and their member tabs are indented under them; ungrouped tabs are flush-left. Call this first to get the exact tab name to pass to get_repeater_tab_content_by_name.") {
+        val frame = api.userInterface().swingUtils().suiteFrame()
+        
+        val repeaterTabs = getRepeaterTabs(frame) ?: return@mcpTool "<No Repeater Tab found.>"
+        val repeaterTabsTitles = StringBuilder()
+        var numberOfTabsInGroup: Int = 0
+        for (i in 0 until repeaterTabs.tabCount) {
+            if (repeaterTabs.getComponentAt(i) == null)
+            {
+                val groupTabComponent = repeaterTabs.getTabComponentAt(i)
+                numberOfTabsInGroup = getNumberOfTabInGroup(groupTabComponent)
+                if (numberOfTabsInGroup == -1) return@mcpTool "<A Group seems to have NO member. Debug required.>"
+                repeaterTabsTitles.append("[GROUP] ").append(repeaterTabs.getTitleAt(i)).append("\n")
+            } else {
+                if (numberOfTabsInGroup != 0) {
+                    repeaterTabsTitles.append("  > ").append(repeaterTabs.getTitleAt(i)).append("\n")
+                    numberOfTabsInGroup--
+                }
+                else repeaterTabsTitles.append(repeaterTabs.getTitleAt(i)).append("\n")
+            }
+        }
+        repeaterTabsTitles.toString()
+    }
+
+    mcpTool<GetRepeaterTabContentByName>("Return the HTTP content of a single Repeater tab identified by its exact name. The contentOption argument chooses what to return: FULL (request and response), REQUEST (request only), or RESPONSE (response only). Use get_all_repeater_tabs_name first to obtain the exact name.") {
+        val frame = api.userInterface().swingUtils().suiteFrame()
+        val repeaterTabs = getRepeaterTabs(frame) ?: return@mcpTool "<No Repeater Tab found. This is unexpected.>"
+        val repeaterTabContent = StringBuilder()
+        for (i in 0 until repeaterTabs.tabCount) {
+            if (repeaterTabs.getComponentAt(i) != null && repeaterTabs.getTitleAt(i) == nameToFind) {
+                SwingUtilities.invokeAndWait { repeaterTabs.selectedIndex = i }
+                val c = repeaterTabs.getComponentAt(i)
+                
+                val rrvRequestsPaneForRequiredTab = findComponentByName(c, "rrvRequestsPane") ?: return@mcpTool "<Could not access this tab's request panel; it may not be rendered or Burp's UI changed>"
+                val requestContentJTextComponent = findComponentByName(rrvRequestsPaneForRequiredTab, "syntaxTextArea") as? JTextComponent ?: return@mcpTool "<Could not read this tab's request editor; Burp's UI may have changed>"
+                
+                val rrvResponsePaneRequiredTab = findComponentByName(c, "rrvResponsePane") ?: return@mcpTool "<Could not access this tab's response panel; it may not be rendered or Burp's UI changed>"
+                val responseContentJTextComponent = findComponentByName(rrvResponsePaneRequiredTab, "syntaxTextArea") as? JTextComponent ?: return@mcpTool "<Could not read this tab's response editor; Burp's UI may have changed>"
+                
+                when (contentOption) {
+                    CONTENT_OPTIONS.FULL.name -> {
+                        repeaterTabContent
+                            .append("[Repeater Tab Name] ").append(nameToFind).append("\n")
+                            .append("[Request]\n")
+                            .append(requestContentJTextComponent.text)
+                            .append("\n[Response]\n")
+                            .append(responseContentJTextComponent.text)
+                    }
+                    CONTENT_OPTIONS.REQUEST.name -> {
+                        repeaterTabContent
+                            .append("[Repeater Tab Name] ").append(nameToFind).append("\n")
+                            .append("[Request]\n")
+                            .append(requestContentJTextComponent.text)
+                    }
+                    CONTENT_OPTIONS.RESPONSE.name -> {
+                        repeaterTabContent
+                            .append("[Repeater Tab Name] ").append(nameToFind).append("\n")
+                            .append("\n[Response]\n")
+                            .append(responseContentJTextComponent.text)
+                    }
+                    else -> {
+                        repeaterTabContent
+                            .append("[Repeater Tab Name] ").append(nameToFind).append("\n")
+                            .append("[Request]\n")
+                            .append(requestContentJTextComponent.text)
+                            .append("\n[Response]\n")
+                            .append(responseContentJTextComponent.text)
+                    }
+                }
+                break
+            }
+        }
+        repeaterTabContent.toString()
+    }
+
+    mcpTool<SearchRepeaterTabsByRegex>("Search every Repeater tab for a regular expression (case-insensitive, multiline) and return the matches. The tab name, request, and response are all searched. For each match the result gives the tab, the section (TAB NAME / REQUEST / RESPONSE), the line number, and the matching line. This visits every tab one by one, so it can be slow when there are many tabs.") {
+        val frame = api.userInterface().swingUtils().suiteFrame()
+        val repeaterTabs = getRepeaterTabs(frame) ?: return@mcpTool "<No Repeater Tab found. This is unexpected.>"
+        val content = StringBuilder()
+        
+        val reg = pattern.toRegex(setOf(RegexOption.IGNORE_CASE, RegexOption.MULTILINE))
+        val repeaterActiveIdx = repeaterTabs.selectedIndex
+        var numberOfTabMatch = 0
+        var totalNumberOfMatch = 0
+        val tabsContentMatch = StringBuilder()
+        for (i in 0 until repeaterTabs.tabCount) {
+            if (repeaterTabs.getComponentAt(i) != null) {
+                var numberOfMatch = 0
+                var tabContentMatch = StringBuilder()
+                if (reg.containsMatchIn(repeaterTabs.getTitleAt(i))) {
+                    tabContentMatch.append("  - matched in TAB NAME\n")
+                    numberOfMatch++
+                }
+                SwingUtilities.invokeAndWait { repeaterTabs.selectedIndex = i }
+                val c = repeaterTabs.getComponentAt(i)
+                
+                val rrvRequestsPaneForRequiredTab = findComponentByName(c, "rrvRequestsPane") ?: return@mcpTool "<Could not access this tab's request panel; it may not be rendered or Burp's UI changed>"
+                val requestContentJTextComponent = findComponentByName(rrvRequestsPaneForRequiredTab, "syntaxTextArea") as? JTextComponent ?: return@mcpTool "<Could not read this tab's request editor; Burp's UI may have changed>"
+                if (reg.containsMatchIn(requestContentJTextComponent.text)) {
+                    val matchResults = reg.findAll(requestContentJTextComponent.text)
+                    val w = if (matchResults.count() > 1) "matches" else "match"
+                    tabContentMatch.append("  - REQUEST: ${matchResults.count()} $w\n")
+                    numberOfMatch += matchResults.count()
+                    //PAI
+                    requestContentJTextComponent.text.lines().withIndex()
+                        .filter { (_, line) -> reg.containsMatchIn(line) }
+                        .forEach { (idx, line) ->
+                            tabContentMatch.append("    L${idx + 1}: ").append(line).append("\n")
+                        }
+                }
+                val rrvResponsePaneRequiredTab = findComponentByName(c, "rrvResponsePane") ?: return@mcpTool "<Could not access this tab's response panel; it may not be rendered or Burp's UI changed>"
+                val responseContentJTextComponent = findComponentByName(rrvResponsePaneRequiredTab, "syntaxTextArea") as? JTextComponent ?: return@mcpTool "<Could not read this tab's response editor; Burp's UI may have changed>"
+                if (reg.containsMatchIn(responseContentJTextComponent.text)) {
+                    val matchResults = reg.findAll(responseContentJTextComponent.text)
+                    val w = if (matchResults.count() > 1) "matches" else "match"
+                    tabContentMatch.append("  - RESPONSE: ${matchResults.count()} $w\n")
+                    numberOfMatch += matchResults.count()
+                    //PAI
+                    responseContentJTextComponent.text.lines().withIndex()
+                        .filter { (_, line) -> reg.containsMatchIn(line) }
+                        .forEach { (idx, line) ->
+                            tabContentMatch.append("    L${idx + 1}: ").append(line).append("\n")
+                        }
+                }
+                if (numberOfMatch != 0) {
+                    numberOfTabMatch++
+                    totalNumberOfMatch += numberOfMatch
+                    val w = if (numberOfMatch > 1) "matches" else "match"
+                    tabsContentMatch.append("[TAB] \"${repeaterTabs.getTitleAt(i)}\" ($numberOfMatch $w)\n")
+                    tabsContentMatch.append(tabContentMatch)
+                }   
+            }
+        }
+        SwingUtilities.invokeAndWait { repeaterTabs.selectedIndex = repeaterActiveIdx }
+        if (totalNumberOfMatch != 0)
+        {
+            val w = if (numberOfTabMatch > 1) "tabs" else "tab"
+            content.append("[SUMMARY] $totalNumberOfMatch match(es) in $numberOfTabMatch $w\n")
+            content.append(tabsContentMatch)
+            content.toString()
+        } else {
+            "<No match found.>"
+        }
+    }
 }
+
+    fun getRepeaterTabs(frame: Frame) : JTabbedPane? {
+        val burpTabBar = findComponentByName(frame, "burpTabBar") as? JTabbedPane ?: return null
+        var repeaterIndex: Int = -1
+        for (i in 0 until burpTabBar.tabCount) {
+            if (burpTabBar.getTitleAt(i) == "Repeater") {
+                repeaterIndex = i
+                break
+            }
+        }
+        if (repeaterIndex == - 1) return null
+        val repeaterComponent = burpTabBar.getComponentAt(repeaterIndex) ?: return null
+        val repeaterTabs = findComponentByName(repeaterComponent, "secondarySuiteTabBar") as? JTabbedPane ?: return null
+        // jTabbedPaneInfos(api, repeaterTabs, 0)
+        if (repeaterTabs.tabCount == 0) return null
+        return repeaterTabs as JTabbedPane
+    }
+
+    fun getNumberOfTabInGroup(component: Component): Int {
+        when (component) {
+            is JLabel if component.text != "" -> {
+                var res = component.text?.toIntOrNull()
+                if (res != null) return res
+                return -1
+            }
+        }
+        if (component is Container) {
+            for (c in component.components) {
+                val numberOfTabsInGroup = getNumberOfTabInGroup(c)
+                if (numberOfTabsInGroup != -1) return numberOfTabsInGroup
+            }
+        }
+        return -1
+    }
+
+    //PAI
+    fun findComponentByName(c: Component, target: String): Component? {
+        if (c.name == target) return c
+        if (c is Container) for (child in c.components) findComponentByName(child, target)?.let { return it }
+        return null
+    }
+
+    fun jTabbedPaneInfos(api: MontoyaApi, jTabbedPane: JTabbedPane, multiplier: Int) {
+        var indent = "  ".repeat(multiplier)
+        if (jTabbedPane.name == "secondarySuiteTabBar"){
+            for (i in 0 until jTabbedPane.tabCount) {
+                api.logging().logToOutput("$indent === jTabbedPane for Repeater N°$i :===")
+                api.logging().logToOutput("$indent jTabbedPane.name : ${jTabbedPane.name}")
+                api.logging().logToOutput("$indent jTabbedPane.getTitleAt(i) : ${jTabbedPane.getTitleAt(i)}") 
+                api.logging().logToOutput("$indent jTabbedPane.getComponentAt(i) : ${jTabbedPane.getComponentAt(i)}")
+                api.logging().logToOutput("$indent jTabbedPane.getTabComponentAt(i) : ${jTabbedPane.getTabComponentAt(i)}")
+                val tabComponent = jTabbedPane.getTabComponentAt(i)
+                if (tabComponent is Container)
+                {
+                    getAllEditorName(api, tabComponent, 1)
+                }
+                api.logging().logToOutput("$indent jTabbedPane.selectedIndex : ${jTabbedPane.selectedIndex}")
+                api.logging().logToOutput("$indent jTabbedPane.selectedComponent : ${jTabbedPane.selectedComponent}")
+            }
+        }
+    }
+
+    fun jLabelInfos(api: MontoyaApi, jLabel: JLabel, multiplier: Int) {
+        var indent = "  ".repeat(multiplier)
+        if (jLabel.text!= null) {
+            api.logging().logToOutput("$indent === jLabel ===")
+            api.logging().logToOutput("$indent JLabel.text : ${jLabel.text}")
+        }
+    }
+
+    fun jTextComponentInfos(api: MontoyaApi, jTextComponent: JTextComponent, multiplier: Int) {
+        var indent = "  ".repeat(multiplier)
+        if (jTextComponent.text != null) {
+            api.logging().logToOutput("$indent === JTextComponent ===")
+            api.logging().logToOutput("$indent JTextComponent.text : ${jTextComponent.text}")
+        }
+    }
+
+
+    fun getAllEditorName(api: MontoyaApi, component: Component, multiplier: Int): String ? {
+        val indent = "  ".repeat(multiplier)
+        api.logging().logToOutput("$indent Component Name : ${component.name}")
+        when (component) {
+            is JTabbedPane -> jTabbedPaneInfos(api, component, multiplier)
+            is JLabel -> jLabelInfos(api, component, multiplier)
+            is JTextComponent -> jTextComponentInfos(api, component, multiplier)
+        }
+        if (component is Container) {
+            for (c in component.components) {
+                getAllEditorName(api, c, multiplier + 1)
+            }
+        }
+        return "debug: getAllEditorName"
+    }
 
 fun getActiveEditor(api: MontoyaApi): JTextArea? {
     val frame = api.userInterface().swingUtils().suiteFrame()
@@ -479,6 +757,34 @@ data class SendToIntruder(
     override val targetPort: Int,
     override val usesHttps: Boolean
 ) : HttpServiceParams
+
+//PAI
+/**
+ * @brief Input parameters for the send_to_organizer tool.
+ * @param content        Raw HTTP/1.1 request text to store.
+ * @param note           Optional note to attach to the stored item; null to store without a note.
+ * @param targetHostname Host the request targets.
+ * @param targetPort     Port the request targets.
+ * @param usesHttps      Whether the target speaks HTTPS.
+ */
+@Serializable
+data class SendToOrganizer(
+    val content: String,
+    val note: String?,
+    override val targetHostname: String,
+    override val targetPort: Int,
+    override val usesHttps: Boolean
+) : HttpServiceParams
+
+enum class CONTENT_OPTIONS {
+    FULL, REQUEST, RESPONSE
+}
+
+@Serializable
+data class GetRepeaterTabContentByName(val nameToFind: String, val contentOption: String)
+
+@Serializable
+data class SearchRepeaterTabsByRegex(val pattern: String)
 
 @Serializable
 data class UrlEncode(val content: String)

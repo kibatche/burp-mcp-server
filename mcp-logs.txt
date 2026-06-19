@@ -1,0 +1,84 @@
+Started MCP server on 127.0.0.1:9876
+responseContentJTextComponent GET / HTTP/2
+Host: example.com
+Sec-Ch-Ua: "Not-A.Brand";v="24", "Chromium";v="146"
+Sec-Ch-Ua-Mobile: ?0
+Sec-Ch-Ua-Platform: "Linux"
+Accept-Language: fr-FR,fr;q=0.9
+Upgrade-Insecure-Requests: 1
+User-Agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36
+Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7
+Sec-Fetch-Site: none
+Sec-Fetch-Mode: navigate
+Sec-Fetch-User: ?1
+Sec-Fetch-Dest: document
+Accept-Encoding: gzip, deflate, br
+Priority: u=0, i
+Connection: keep-alive
+
+
+responseContentJTextComponent HTTP/2 200 OK
+Date: Fri, 19 Jun 2026 08:21:10 GMT
+Content-Type: text/html
+Server: cloudflare
+Last-Modified: Tue, 16 Jun 2026 20:39:21 GMT
+Allow: GET, HEAD
+Age: 7638
+Cf-Cache-Status: HIT
+Cf-Ray: a0e11e67389897ce-CDG
+
+<!doctype html><html lang="en"><head><title>Example Domain</title><link rel="icon" href="data:,"><meta name="viewport" content="width=device-width, initial-scale=1"><style>body{background:#eee;width:60vw;margin:15vh auto;font-family:system-ui,sans-serif}h1{font-size:1.5em}div{opacity:0.8}a:link,a:visited{color:#348}</style></head><body><div><h1>Example Domain</h1><p>This domain is for use in documentation examples without needing permission. Avoid use in operations.</p><p><a href="https://iana.org/domains/example">Learn more</a></p></div></body></html>
+
+Started MCP server on 127.0.0.1:9876
+matchResults.toString() = kotlin.sequences.GeneratorSequence@5ce9248c
+matchResults.toString() = kotlin.sequences.GeneratorSequence@58d22be
+Started MCP server on 127.0.0.1:9876
+matchResults.toString() = kotlin.sequences.GeneratorSequence@334ff8f9
+matchResults.toString() = kotlin.sequences.GeneratorSequence@4b4c209b
+matchResults.toString() = kotlin.sequences.GeneratorSequence@2ff75ebd
+matchResults.toString() = kotlin.sequences.GeneratorSequence@2130b533
+Started MCP server on 127.0.0.1:9876
+matchResults.toString() = kotlin.sequences.GeneratorSequence@37d40aea
+matchResults.toString() = kotlin.sequences.GeneratorSequence@2d1b4a87
+Started MCP server on 127.0.0.1:9876
+matchResults.toString() = kotlin.sequences.GeneratorSequence@3b849075
+matchResults.toString() = kotlin.sequences.GeneratorSequence@6c3029e1
+matchResults.toString() = kotlin.sequences.GeneratorSequence@40bde26d
+matchResults.toString() = kotlin.sequences.GeneratorSequence@2d2fb4ba
+matchResults.toString() = kotlin.sequences.GeneratorSequence@90c986d
+matchResults.toString() = kotlin.sequences.GeneratorSequence@d330d94
+matchResults.toString() = kotlin.sequences.GeneratorSequence@3129ccf6
+matchResults.toString() = kotlin.sequences.GeneratorSequence@ee9efd7
+matchResults.toString() = kotlin.sequences.GeneratorSequence@734b0c49
+matchResults.toString() = kotlin.sequences.GeneratorSequence@676de610
+Started MCP server on 127.0.0.1:9876
+matchResults.toString() = kotlin.sequences.GeneratorSequence@33c6ddc7
+matchResults.toString() = kotlin.sequences.GeneratorSequence@4aaa8b42
+matchResults.toString() = kotlin.sequences.GeneratorSequence@37b6aa07
+matchResults.toString() = kotlin.sequences.GeneratorSequence@42379e8e
+matchResults.toString() = kotlin.sequences.GeneratorSequence@4c2ca3d5
+matchResults.toString() = kotlin.sequences.GeneratorSequence@42eb5420
+matchResults.toString() = kotlin.sequences.GeneratorSequence@46d4c8a5
+matchResults.toString() = kotlin.sequences.GeneratorSequence@3d65e1b
+Started MCP server on 127.0.0.1:9876
+matchResults.toString() = kotlin.sequences.GeneratorSequence@1d52847d
+matchResults.toString() = kotlin.sequences.GeneratorSequence@16bad311
+matchResults.toString() = kotlin.sequences.GeneratorSequence@2d281241
+matchResults.toString() = kotlin.sequences.GeneratorSequence@4bac28f4
+matchResults.toString() = kotlin.sequences.GeneratorSequence@1ee6d952
+matchResults.toString() = kotlin.sequences.GeneratorSequence@102124fe
+matchResults.toString() = kotlin.sequences.GeneratorSequence@141eb222
+matchResults.toString() = kotlin.sequences.GeneratorSequence@511c2ec5
+Started MCP server on 127.0.0.1:9876
+matchResults.toString() = kotlin.sequences.GeneratorSequence@a1e2350
+matchResults.toString() = kotlin.sequences.GeneratorSequence@44681676
+matchResults.toString() = kotlin.sequences.GeneratorSequence@242862cd
+matchResults.toString() = kotlin.sequences.GeneratorSequence@575e553b
+matchResults.toString() = kotlin.sequences.GeneratorSequence@56ea6dfa
+matchResults.toString() = kotlin.sequences.GeneratorSequence@582d9957
+matchResults.toString() = kotlin.sequences.GeneratorSequence@5c12068a
+matchResults.toString() = kotlin.sequences.GeneratorSequence@1910936c
+Started MCP server on 127.0.0.1:9876
+Started MCP server on 127.0.0.1:9876
+Started MCP server on 127.0.0.1:9876
+MCP Organizer access granted
