@@ -82,3 +82,11 @@ Started MCP server on 127.0.0.1:9876
 Started MCP server on 127.0.0.1:9876
 Started MCP server on 127.0.0.1:9876
 MCP Organizer access granted
+Started MCP server on 127.0.0.1:9876
+MCP Organizer access granted
+MCP Organizer access granted
+Started MCP server on 127.0.0.1:9876
+MCP Organizer access granted
+Started MCP server on 127.0.0.1:9876
+Started MCP server on 127.0.0.1:9876
+MCP Organizer access granted

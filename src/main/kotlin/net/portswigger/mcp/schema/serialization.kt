@@ -54,12 +54,15 @@ fun ProxyHttpRequestResponse.toSerializableForm(): HttpRequestResponse {
 }
 
 fun OrganizerItem.toSerializableForm(): OrganizerItemDetails {
+    val annotations = annotations()
     return OrganizerItemDetails(
         id = id(),
         status = status().displayName(),
         request = request()?.toString() ?: "<no request>",
         response = response()?.toString() ?: "<no response>",
-        notes = annotations().notes()
+        notes = annotations.notes(),
+        // highlight color is exposed for client-side grouping; null when unset so callers can ignore it
+        color = if (annotations.hasHighlightColor()) annotations.highlightColor().displayName() else null
     )
 }
 
@@ -125,7 +128,8 @@ data class OrganizerItemDetails(
     val status: String,
     val request: String?,
     val response: String?,
-    val notes: String?
+    val notes: String?,
+    val color: String? = null
 )
 
 @Serializable
