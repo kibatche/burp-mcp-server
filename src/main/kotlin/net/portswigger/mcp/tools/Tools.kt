@@ -11,6 +11,7 @@ import burp.api.montoya.http.message.HttpHeader
 import burp.api.montoya.http.message.requests.HttpRequest
 import burp.api.montoya.http.message.HttpRequestResponse
 import burp.api.montoya.core.Annotations
+import burp.api.montoya.core.HighlightColor
 import io.modelcontextprotocol.kotlin.sdk.server.Server
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.Serializable
@@ -209,22 +210,70 @@ fun Server.registerTools(api: MontoyaApi, config: McpConfig) {
      * @brief Stores a raw HTTP/1.1 request in Burp's Organizer via the Montoya API.
      *        Why API and not UI: api.organizer() exposes both read (items()) and write
      *        (sendToOrganizer), so unlike the Repeater there is no need to scrape Swing.
+     *        The note is mandatory: an Organizer item with no documented action/consequence
+     *        is useless as evidence and gives the report renderer no title.
      * @return A confirmation string once the request has been sent to the Organizer.
      */
-    mcpTool<SendToOrganizer>("Stores an HTTP request in Burp's Organizer (a holding area for requests of interest). Provide the raw HTTP/1.1 request plus the target host and port, and optionally a note to attach to the item. Make sure to use carriage returns appropriately. Read stored items back with get_organizer_items.") {
+    mcpTool<SendToOrganizer>("Stores an HTTP request in Burp's Organizer (a holding area for requests of interest). Provide the raw HTTP/1.1 request plus the target host and port. A note is REQUIRED — document the action attempted and its consequence. Optionally set a highlight color (NONE, RED, ORANGE, YELLOW, GREEN, CYAN, BLUE, PINK, MAGENTA, GRAY). Make sure to use carriage returns appropriately. Read stored items back with get_organizer_items.") {
+        if (note.isBlank()) return@mcpTool "Refused: a non-blank note is mandatory (action attempted + consequence)."
+        val highlight = if (color == null) null else (parseHighlightColor(color)
+            ?: return@mcpTool "Invalid color '$color'. Valid: ${highlightColorNames()}")
+
         val fixedContent = normalizeHttpContent(content)
         val request = HttpRequest.httpRequest(toMontoyaService(), fixedContent)
-        if (note.isNullOrBlank()) {
-            api.organizer().sendToOrganizer(request)
-            "Request sent to the Organizer."
-        } else {
-            // No response yet (the request hasn't been sent): build a request/response pair with a
-            // null response so the note can ride along via annotations. The Organizer accepts
-            // no-response items (sendToOrganizer(HttpRequest) already produces "<no response>").
-            val withNote = HttpRequestResponse.httpRequestResponse(request, null, Annotations.annotations(note))
-            api.organizer().sendToOrganizer(withNote)
-            "Request sent to the Organizer (note: $note)."
+
+        val annotations =
+            if (highlight == null) Annotations.annotations(note)
+            else Annotations.annotations(note, highlight)
+        // No response yet (the request hasn't been sent): build a request/response pair with a
+        // null response so the annotations ride along. The Organizer accepts no-response items.
+        val withNote = HttpRequestResponse.httpRequestResponse(request, null, annotations)
+        api.organizer().sendToOrganizer(withNote)
+        "Request sent to the Organizer (note: $note${highlight?.let { ", color: ${it.displayName()}" } ?: ""})."
+    }
+
+    //PAI
+    /**
+     * @brief Overwrites the note (mandatory) and optional highlight color of an EXISTING Organizer
+     *        item, addressed by its id. Mutates annotations() in place, then re-reads from a fresh
+     *        items() call to confirm the change actually persisted to the Organizer (the persisted
+     *        flag in the result answers that open question empirically).
+     */
+    mcpTool<SetOrganizerItemAnnotations>("Updates an EXISTING Organizer item (found by id from get_organizer_items): overwrites its note and optionally its highlight color. The note is REQUIRED — every item must state the action attempted and its consequence. color is optional, one of NONE, RED, ORANGE, YELLOW, GREEN, CYAN, BLUE, PINK, MAGENTA, GRAY. Use this to reorganize/annotate items. Returns the applied values plus a read-back and a persisted flag so you can confirm the change stuck.") {
+        val allowed = runBlocking {
+            checkDataAccessOrDeny(DataAccessType.ORGANIZER, config, api, "Organizer")
         }
+        if (!allowed) return@mcpTool "Organizer access denied by Burp Suite"
+
+        if (note.isBlank()) return@mcpTool "Refused: a non-blank note is mandatory (action attempted + consequence)."
+        val highlight = if (color == null) null else (parseHighlightColor(color)
+            ?: return@mcpTool "Invalid color '$color'. Valid: ${highlightColorNames()}")
+
+        val item = api.organizer().items().firstOrNull { it.id() == id }
+            ?: return@mcpTool "No Organizer item with id=$id."
+
+        val ann = item.annotations()
+        ann.setNotes(note)
+        if (highlight != null) ann.setHighlightColor(highlight)
+
+        // Re-read from a fresh items() snapshot to verify the in-place mutation persisted.
+        val reloaded = api.organizer().items().firstOrNull { it.id() == id }
+        val readBackNote = reloaded?.annotations()?.notes()
+        val readBackColor = reloaded?.annotations()
+            ?.takeIf { it.hasHighlightColor() }?.highlightColor()?.displayName()
+        val persisted = readBackNote == note &&
+            (highlight == null || readBackColor == highlight.displayName())
+
+        Json.encodeToString(
+            SetOrganizerResult(
+                id = id,
+                appliedNote = note,
+                appliedColor = highlight?.displayName(),
+                readBackNote = readBackNote,
+                readBackColor = readBackColor,
+                persisted = persisted,
+            )
+        )
     }
 
     mcpTool<UrlEncode>("URL encodes the input string") {
@@ -703,6 +752,16 @@ fun getActiveEditor(api: MontoyaApi): JTextArea? {
     }
 }
 
+//PAI
+private fun parseHighlightColor(name: String): HighlightColor? =
+    HighlightColor.values().firstOrNull {
+        it.name.equals(name, ignoreCase = true) || it.displayName().equals(name, ignoreCase = true)
+    }
+
+//PAI
+private fun highlightColorNames(): String =
+    HighlightColor.values().joinToString(", ") { it.name }
+
 interface HttpServiceParams {
     val targetHostname: String
     val targetPort: Int
@@ -762,7 +821,8 @@ data class SendToIntruder(
 /**
  * @brief Input parameters for the send_to_organizer tool.
  * @param content        Raw HTTP/1.1 request text to store.
- * @param note           Optional note to attach to the stored item; null to store without a note.
+ * @param note           Mandatory note (action attempted + consequence) attached to the item.
+ * @param color          Optional highlight color name (e.g. RED, PINK); null for none.
  * @param targetHostname Host the request targets.
  * @param targetPort     Port the request targets.
  * @param usesHttps      Whether the target speaks HTTPS.
@@ -770,11 +830,40 @@ data class SendToIntruder(
 @Serializable
 data class SendToOrganizer(
     val content: String,
-    val note: String?,
+    val note: String,
+    val color: String? = null,
     override val targetHostname: String,
     override val targetPort: Int,
     override val usesHttps: Boolean
 ) : HttpServiceParams
+
+//PAI
+/**
+ * @brief Input parameters for set_organizer_item_annotations.
+ * @param id    Organizer item id (from get_organizer_items).
+ * @param note  Mandatory note (action attempted + consequence).
+ * @param color Optional highlight color name; null leaves the existing color unchanged.
+ */
+@Serializable
+data class SetOrganizerItemAnnotations(
+    val id: Int,
+    val note: String,
+    val color: String? = null
+)
+
+//PAI
+/**
+ * @brief Result of set_organizer_item_annotations, including a read-back to prove persistence.
+ */
+@Serializable
+data class SetOrganizerResult(
+    val id: Int,
+    val appliedNote: String,
+    val appliedColor: String?,
+    val readBackNote: String?,
+    val readBackColor: String?,
+    val persisted: Boolean
+)
 
 enum class CONTENT_OPTIONS {
     FULL, REQUEST, RESPONSE
