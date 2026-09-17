@@ -1,3 +1,9 @@
+/**
+ * @desc MCP tool registration. Upstream file from PortSwigger's mcp-server; the fork adds
+ *       Repeater tab addressing by name and Organizer read/write with notes and highlight colours.
+ * @author kbtch_ — fork additions
+ * @author Shevek — fork additions
+ */
 package net.portswigger.mcp.tools
 
 import burp.api.montoya.MontoyaApi
@@ -205,7 +211,6 @@ fun Server.registerTools(api: MontoyaApi, config: McpConfig) {
         api.intruder().sendToIntruder(request, tabName)
     }
 
-    //PAI
     /**
      * @brief Stores a raw HTTP/1.1 request in Burp's Organizer via the Montoya API.
      *        Why API and not UI: api.organizer() exposes both read (items()) and write
@@ -232,7 +237,6 @@ fun Server.registerTools(api: MontoyaApi, config: McpConfig) {
         "Request sent to the Organizer (note: $note${highlight?.let { ", color: ${it.displayName()}" } ?: ""})."
     }
 
-    //PAI
     /**
      * @brief Overwrites the note (mandatory) and optional highlight color of an EXISTING Organizer
      *        item, addressed by its id. Mutates annotations() in place, then re-reads from a fresh
@@ -600,7 +604,6 @@ fun Server.registerTools(api: MontoyaApi, config: McpConfig) {
                     val w = if (matchResults.count() > 1) "matches" else "match"
                     tabContentMatch.append("  - REQUEST: ${matchResults.count()} $w\n")
                     numberOfMatch += matchResults.count()
-                    //PAI
                     requestContentJTextComponent.text.lines().withIndex()
                         .filter { (_, line) -> reg.containsMatchIn(line) }
                         .forEach { (idx, line) ->
@@ -614,7 +617,6 @@ fun Server.registerTools(api: MontoyaApi, config: McpConfig) {
                     val w = if (matchResults.count() > 1) "matches" else "match"
                     tabContentMatch.append("  - RESPONSE: ${matchResults.count()} $w\n")
                     numberOfMatch += matchResults.count()
-                    //PAI
                     responseContentJTextComponent.text.lines().withIndex()
                         .filter { (_, line) -> reg.containsMatchIn(line) }
                         .forEach { (idx, line) ->
@@ -677,7 +679,6 @@ fun Server.registerTools(api: MontoyaApi, config: McpConfig) {
         return -1
     }
 
-    //PAI
     fun findComponentByName(c: Component, target: String): Component? {
         if (c.name == target) return c
         if (c is Container) for (child in c.components) findComponentByName(child, target)?.let { return it }
@@ -752,13 +753,11 @@ fun getActiveEditor(api: MontoyaApi): JTextArea? {
     }
 }
 
-//PAI
 private fun parseHighlightColor(name: String): HighlightColor? =
     HighlightColor.values().firstOrNull {
         it.name.equals(name, ignoreCase = true) || it.displayName().equals(name, ignoreCase = true)
     }
 
-//PAI
 private fun highlightColorNames(): String =
     HighlightColor.values().joinToString(", ") { it.name }
 
@@ -817,7 +816,6 @@ data class SendToIntruder(
     override val usesHttps: Boolean
 ) : HttpServiceParams
 
-//PAI
 /**
  * @brief Input parameters for the send_to_organizer tool.
  * @param content        Raw HTTP/1.1 request text to store.
@@ -837,7 +835,6 @@ data class SendToOrganizer(
     override val usesHttps: Boolean
 ) : HttpServiceParams
 
-//PAI
 /**
  * @brief Input parameters for set_organizer_item_annotations.
  * @param id    Organizer item id (from get_organizer_items).
@@ -851,7 +848,6 @@ data class SetOrganizerItemAnnotations(
     val color: String? = null
 )
 
-//PAI
 /**
  * @brief Result of set_organizer_item_annotations, including a read-back to prove persistence.
  */

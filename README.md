@@ -6,6 +6,52 @@ Integrate Burp Suite with AI Clients using the Model Context Protocol (MCP).
 
 For more information about the protocol visit: [modelcontextprotocol.io](https://modelcontextprotocol.io/)
 
+## What this fork adds
+
+Fork of [PortSwigger/mcp-server](https://github.com/PortSwigger/mcp-server). Upstream exposes only
+`get_active_editor_contents` for the Repeater, which means the focused editor and nothing else, and
+its Organizer support is read-only. Both gaps make an agent depend on the operator to point at
+things by hand. This fork addresses tabs and items **by name and by id**, and can write back.
+
+### Repeater — read by name
+
+Upstream has no Montoya API for the Repeater, so these tools walk the Swing component tree.
+
+| Tool | What it does |
+|---|---|
+| `get_all_repeater_tabs_name` | Lists every Repeater tab name, so a tab can be addressed without focusing it. |
+| `get_repeater_tab_content_by_name` | Returns one tab by its exact name. `contentOption` selects `FULL`, `REQUEST` or `RESPONSE` — a response-only read avoids re-sending the request text through the model. |
+| `search_repeater_tabs_by_regex` | Case-insensitive multiline search across every tab. Each hit reports tab, section (`TAB NAME` / `REQUEST` / `RESPONSE`), line number and the matching line, instead of the whole message. Visits tabs one by one, so it is slow with many tabs. |
+
+### Organizer — write, not just read
+
+| Tool | What it does |
+|---|---|
+| `send_to_organizer` | Stores a raw HTTP/1.1 request. The **note is mandatory** — it states the action attempted and its consequence — and an optional `color` sets the highlight. |
+| `set_organizer_item_annotations` | Overwrites the note (mandatory) and optional colour of an **existing** item, addressed by the `id` returned by `get_organizer_items`. Mutates `annotations()` in place, then re-reads from a fresh `items()` call and returns both the read-back and a `persisted` flag. |
+
+`OrganizerItem.toSerializableForm()` now also exposes the highlight colour. `OrganizerItem` has no
+dedicated colour accessor — it extends `HttpRequestResponse` — so the value is read from
+`annotations().highlightColor().displayName()`, guarded by `hasHighlightColor()`; absent, the field
+is omitted rather than serialised as null.
+
+Colour names accept either the enum name or the display name, case-insensitive:
+`NONE, RED, ORANGE, YELLOW, GREEN, CYAN, BLUE, PINK, MAGENTA, GRAY`.
+
+### Not implemented, and why
+
+Deleting an Organizer item and setting its status are **not** possible through Montoya:
+`Organizer` exposes only `sendToOrganizer(...)` and `items()`, and `OrganizerItemStatus` is
+read-only with no setter on `OrganizerItem` or on `Annotations`. Scraping Swing for the Organizer
+was rejected — unlike the Repeater, where there is no API at all, here an API exists and is simply
+incomplete. Mark items for deletion in the note instead.
+
+### Building
+
+The `jar` task is disabled in this fork's build. The artefact is produced by `shadowJar`, then
+`embedProxyJar` injects `mcp-proxy-all.jar` into it (~28 MB). `./gradlew jar` produces nothing
+usable.
+
 ## Features
 
 - Connect Burp Suite to AI clients through MCP

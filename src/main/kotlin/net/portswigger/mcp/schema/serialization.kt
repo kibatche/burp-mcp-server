@@ -1,3 +1,9 @@
+/**
+ * @desc Serialization of Montoya objects into MCP payloads. Upstream file from PortSwigger's
+ *       mcp-server; the fork adds the Organizer highlight colour to OrganizerItem.
+ * @author kbtch_ — fork additions
+ * @author Shevek — fork additions
+ */
 package net.portswigger.mcp.schema
 
 import burp.api.montoya.collaborator.Interaction as CollaboratorInteraction
